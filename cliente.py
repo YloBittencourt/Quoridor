@@ -7,7 +7,8 @@ import time
 import pygame
 import sys
 
-COR_MESA = (30, 30, 35)           
+# Cores do Tabuleiro e Peões
+COR_MESA = (30, 30, 35)
 COR_BASE_TABULEIRO = (60, 35, 20) 
 COR_CASA_SOMBRA = (160, 110, 70)  
 COR_CASA = (220, 170, 110)        
@@ -18,35 +19,45 @@ COR_TEXTO = (236, 240, 241)
 # Cores dos Peões: (Cor Base Escura, Cor Brilho Clara)
 # Índices: 0=Vermelho, 1=Azul, 2=Verde, 3=Amarelo
 CORES_PEOES = [
-    ((200, 40, 40), (255, 100, 100)), 
-    ((40, 100, 200), (100, 160, 255)),
+    ((200, 40, 40), (255, 100, 100)),
+    ((40, 100, 200), (100, 160, 255)), 
     ((40, 180, 80), (100, 240, 140)),
     ((220, 180, 20), (255, 230, 100))
 ]
 
+# Responsável pela interface gráfica do cliente Quoridor
+# incluindo conexão com o servidor, entrada do nome do jogador, desenho do tabuleiro e peões, e tratamento de eventos de clique.
 class ClienteQuoridor:
     def __init__(self):
         root = tk.Tk()
         root.withdraw()
-        
+
+        # Solicita a URI do servidor e cria o proxy Pyro
         while True:
+            # Solicita a URI do servidor ao usuário
             uri = simpledialog.askstring("Conexão", "URI do Servidor (ex: PYRO:...):", parent=root)
-            if not uri: sys.exit()
+            if not uri: sys.exit() # Sai se o usuário cancelar
+            # Limpa a URI de espaços e quebras de linha
             self.uri = uri.strip().replace("\n", "").replace("\r", "").replace(" ", "")
             try:
+                # Cria o proxy Pyro e tenta se conectar ao servidor
                 self.proxy = Pyro5.api.Proxy(self.uri)
                 self.proxy._pyroBind() 
                 break
             except Exception as e:
                 messagebox.showerror("Erro de Rede", f"URI inválida ou Servidor offline.\n{e}", parent=root)
-        
+        # Solicita o nome do jogador e tenta entrar no jogo
         while True:
+            # Solicita o nome do jogador ao usuário
             self.nome = simpledialog.askstring("Identificação", "Seu Nome:", parent=root)
+            # Sai se o usuário cancelar ou não digitar nada
             if not self.nome: sys.exit()
+            # Limpa o nome de espaços e quebras de linha
             self.nome = self.nome.strip()
             if self.nome: break
         
         try:
+            # Tenta entrar no jogo com o nome fornecido
             msg = self.proxy.entrar(self.nome)
             if "Erro" in msg:
                 messagebox.showerror("Acesso Negado", msg, parent=root)
@@ -57,6 +68,7 @@ class ClienteQuoridor:
             
         root.destroy() 
 
+        # Inicializa o Pygame e configura a janela do jogo
         pygame.init()
         pygame.display.set_caption(f"Quoridor Distribuído - {self.nome}")
         
@@ -70,19 +82,26 @@ class ClienteQuoridor:
         self.estado = None
         self.rodando = True
         
+        # Inicia a thread de polling para atualizar o estado do jogo
         threading.Thread(target=self.thread_polling, daemon=True).start()
         self.game_loop()
 
+    # Thread de Polling
+    # Responsável por atualizar o estado do jogo periodicamente
     def thread_polling(self):
         proxy_background = Pyro5.api.Proxy(self.uri) 
+        # Mantém a thread rodando enquanto o cliente estiver ativo
         while self.rodando:
             try:
+                # Obtém o estado atual do jogo do servidor
                 novo_estado = proxy_background.obter_estado() 
+                # Atualiza o estado local do cliente com o estado obtido do servidor
                 self.estado = novo_estado
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(0.5) # Aguarda 0.5 segundos antes de tentar novamente
 
+    # Desenha um peão 3D na tela do jogo
     def desenhar_peao_3d(self, x, y, cor_base, cor_brilho):
         pygame.draw.circle(self.tela, (30, 20, 10), (x + 3, y + 4), 18)
         cor_escura = (max(0, cor_base[0]-60), max(0, cor_base[1]-60), max(0, cor_base[2]-60))
@@ -90,6 +109,7 @@ class ClienteQuoridor:
         pygame.draw.circle(self.tela, cor_base, (x, y), 15)
         pygame.draw.circle(self.tela, cor_brilho, (x - 5, y - 5), 5)
 
+    # Desenha a tela do jogo
     def desenhar_tela(self):
         self.tela.fill(COR_MESA)
         if not self.estado:
@@ -136,7 +156,8 @@ class ClienteQuoridor:
         espaco = 10 
         tamanho_total = tamanho_casa + espaco
         largura_tabuleiro = (9 * tamanho_total) - espaco
-        
+
+        # Desenha a borda do tabuleiro com sombra e cor base
         pygame.draw.rect(self.tela, (15, 10, 5), (offset_x-10, offset_y-10, largura_tabuleiro+24, largura_tabuleiro+24), border_radius=8)
         pygame.draw.rect(self.tela, COR_BASE_TABULEIRO, (offset_x-10, offset_y-10, largura_tabuleiro+20, largura_tabuleiro+20), border_radius=8)
 
@@ -182,6 +203,7 @@ class ClienteQuoridor:
 
         pygame.display.flip()
 
+    # Trata o clique do mouse na tela do jogo
     def tratar_clique(self, pos):
         if not self.estado or not self.estado["iniciado"]: return
         if self.estado["turno"] != self.nome: return
@@ -193,12 +215,15 @@ class ClienteQuoridor:
         x_rel = x - offset_x
         y_rel = y - offset_y
 
+        # Verifica se o clique está fora do tabuleiro
         if x_rel < 0 or y_rel < 0 or x_rel > 540 or y_rel > 540:
             return 
 
+        # Calcula a linha e coluna relativas ao tabuleiro
         c, c_resto = divmod(x_rel, tamanho_total)
         r, r_resto = divmod(y_rel, tamanho_total)
 
+        # Determina se o clique é para mover o peão ou colocar uma parede
         if c_resto < 45 and r_resto < 45:
             self.proxy.mover(self.nome, r, c)
         else:
@@ -207,6 +232,8 @@ class ClienteQuoridor:
             elif r_resto >= 45 and c < 8: 
                 self.proxy.colocar_parede(self.nome, 'H', r, c)
 
+    # Loop principal do jogo
+    # Responsável por processar eventos e atualizar a tela
     def game_loop(self):
         while self.rodando:
             for event in pygame.event.get():
