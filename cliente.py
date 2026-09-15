@@ -126,9 +126,14 @@ class ClienteQuoridor:
             cor_txt = (255, 80, 80)
         elif self.estado["iniciado"]:
             turno_atual = self.estado["turno"]
-            txt = f"Turno atual: {turno_atual}"
             idx_turno = jogadores.index(turno_atual)
-            cor_txt = CORES_PEOES[idx_turno][1] 
+            cor_txt = CORES_PEOES[idx_turno][1]
+            
+            # Validação do contexto local
+            if turno_atual == self.nome:
+                txt = "É SUA VEZ!"
+            else:
+                txt = f"Turno atual: {turno_atual}"
         else:
             qtd = len(jogadores)
             txt = f"Aguardando jogadores... ({qtd}/4)"
